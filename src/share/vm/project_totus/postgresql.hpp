@@ -1,7 +1,9 @@
 #ifndef PROJECT_TOTUS_POSTGRESQL_HPP
 #define PROJECT_TOTUS_POSTGRESQL_HPP
 
-// #include <cstdint>
+#undef max
+#undef min
+
 #include <memory>
 #include <string>
 
@@ -16,6 +18,8 @@ public:
   PostgreSQL(const std::string &PackageName, const std::string &PackageVersion);
   ~PostgreSQL();
 };
+
+extern PostgreSQL *postgresql;
 
 }
 

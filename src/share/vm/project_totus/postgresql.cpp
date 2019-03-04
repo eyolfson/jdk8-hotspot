@@ -1,17 +1,21 @@
 #include "postgresql.hpp"
 
-#include <cassert>
+#include "runtime/os.hpp"
+
+#undef max
+#undef min
+
 #include <list>
 #include <vector>
 
 #include <arpa/inet.h>
 #include <libpq-fe.h>
 
-#include <stdlib.h> // for exit, TODO replace with VMError::report_and_die()
-
 using namespace project_totus;
 
 namespace project_totus {
+
+PostgreSQL *postgresql = nullptr;
 
 struct PostgreSQLImpl {
   PGconn *Connection;
@@ -66,10 +70,12 @@ public:
   }
   int getN() const {
     if (Values.size() != Lengths.size()) {
-      exit(-1);
+      printf("ERROR: database parameters mismatched\n");
+      os::abort();
     }
     if (Values.size() != Formats.size()) {
-      exit(-1);
+      printf("ERROR: database parameters mismatched\n");
+      os::abort();
     }
     return Values.size();
   }
@@ -85,7 +91,9 @@ void ExecCommand(PostgreSQLImpl &Impl,
 		 const Params &Params) {
   Exec(Impl, Query, Params);
   if (PQresultStatus(Impl.Result) != PGRES_COMMAND_OK) {
-    exit(-1);
+    printf("ERROR: database did not execute command: %s\n",
+	   PQresultErrorMessage(Impl.Result));
+    os::abort();
   }
   PQclear(Impl.Result);
 }
@@ -95,7 +103,9 @@ void ExecTuples(PostgreSQLImpl &Impl,
 		const Params &Params) {
   Exec(Impl, Query, Params);
   if (PQresultStatus(Impl.Result) != PGRES_TUPLES_OK) {
-    exit(-1);
+    printf("ERROR: database did not return valid tuples: %s\n",
+	   PQresultErrorMessage(Impl.Result));
+    os::abort();
   }
 }
 
@@ -104,7 +114,8 @@ uint32_t GetID(PostgreSQLImpl &Impl,
 	       const Params &Params) {
   ExecTuples(Impl, Query, Params);
   if (PQntuples(Impl.Result) != 1) {
-    exit(-1);
+    printf("ERROR: database returned more than one ID\n");
+    os::abort();
   }
   int FieldIndex = PQfnumber(Impl.Result, "id");
   char *Value = PQgetvalue(Impl.Result, 0, FieldIndex);
@@ -120,7 +131,8 @@ PostgreSQL::PostgreSQL(const std::string &PackageName,
     : Impl(new PostgreSQLImpl) {
   Impl->Connection = PQconnectdb("dbname=project_totus");
   if (PQstatus(Impl->Connection) != CONNECTION_OK) {
-    exit(-1);
+    printf("ERROR: can not connect to database\n");
+    os::abort();
   }
   Params Params;
   Params.addText("project_totus");
@@ -130,7 +142,8 @@ PostgreSQL::PostgreSQL(const std::string &PackageName,
     "SELECT id FROM django_migrations WHERE app = $1 AND name = $2;",
     Params);
   if (PQntuples(Impl->Result) != 1) {
-    exit(-1);
+    printf("ERROR: apply the latest database migration\n");
+    os::abort();
   }
   PQclear(Impl->Result);
   Params.clear();

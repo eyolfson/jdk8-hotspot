@@ -94,6 +94,8 @@
 # include "os_bsd.inline.hpp"
 #endif
 
+#include "project_totus/project_totus.hpp"
+
 static jint CurrentVersion = JNI_VERSION_1_8;
 
 
@@ -5211,6 +5213,8 @@ _JNI_IMPORT_OR_EXPORT_ jint JNICALL JNI_CreateJavaVM(JavaVM **vm, void **penv, v
   }
 
   assert(vm_created == 1, "vm_created is true during the creation");
+
+  project_totus::initialize();
 
   /**
    * Certain errors during initialization are recoverable and do not
