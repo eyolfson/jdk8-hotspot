@@ -182,8 +182,6 @@ PostgreSQL::~PostgreSQL() {
 void PostgreSQL::addMethod(ciMethod * method)
 {
   pthread_mutex_lock(&add_method_mutex);
-  printf("addMethod %s %s %s\n", method->holder()->name()->as_utf8(), method->name()->as_utf8(), method->signature()->as_symbol()->as_utf8());
-
   Params Params;
   Params.addBinary(PackageID);
   Params.addText(method->holder()->name()->as_utf8());
