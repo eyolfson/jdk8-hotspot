@@ -1,6 +1,8 @@
 #ifndef PROJECT_TOTUS_POSTGRESQL_HPP
 #define PROJECT_TOTUS_POSTGRESQL_HPP
 
+#include "ci/ciMethod.hpp"
+
 #undef max
 #undef min
 
@@ -17,6 +19,7 @@ class PostgreSQL {
 public:
   PostgreSQL(const std::string &PackageName, const std::string &PackageVersion);
   ~PostgreSQL();
+  void addMethod(ciMethod * method);
 };
 
 extern PostgreSQL *postgresql;

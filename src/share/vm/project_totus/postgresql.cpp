@@ -124,6 +124,8 @@ uint32_t GetID(PostgreSQLImpl &Impl,
   return ID;
 }
 
+pthread_mutex_t add_method_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 }
 
 PostgreSQL::PostgreSQL(const std::string &PackageName,
@@ -170,8 +172,42 @@ PostgreSQL::PostgreSQL(const std::string &PackageName,
     "SELECT id FROM project_totus_package"
     " WHERE base_id = $1 AND version = $2;",
     Params);
+  Params.clear();
 }
 
 PostgreSQL::~PostgreSQL() {
   PQfinish(Impl->Connection);
+}
+
+void PostgreSQL::addMethod(ciMethod * method)
+{
+  pthread_mutex_lock(&add_method_mutex);
+  printf("addMethod %s %s %s\n", method->holder()->name()->as_utf8(), method->name()->as_utf8(), method->signature()->as_symbol()->as_utf8());
+
+  Params Params;
+  Params.addBinary(PackageID);
+  Params.addText(method->holder()->name()->as_utf8());
+  ExecCommand(
+    *Impl,
+    "INSERT INTO project_totus_klass (package_id, name) VALUES ($1, $2)"
+    " ON CONFLICT DO NOTHING;",
+    Params);
+  uint32_t KlassID = GetID(
+    *Impl,
+    "SELECT id FROM project_totus_klass"
+    " WHERE package_id = $1 AND name = $2;",
+    Params);
+  Params.clear();
+  Params.addBinary(KlassID);
+  Params.addText(method->name()->as_utf8());
+  Params.addText(method->signature()->as_symbol()->as_utf8());
+  Params.addBool(!method->is_static());
+  ExecCommand(
+    *Impl,
+    "INSERT INTO project_totus_method"
+    " (klass_id, name, descriptor, is_instance_method) VALUES ($1, $2, $3, $4)"
+    " ON CONFLICT DO NOTHING;",
+    Params);
+  Params.clear();
+  pthread_mutex_unlock(&add_method_mutex);
 }

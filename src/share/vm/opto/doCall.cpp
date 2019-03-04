@@ -40,6 +40,8 @@
 #include "prims/nativeLookup.hpp"
 #include "runtime/sharedRuntime.hpp"
 
+#include "project_totus/postgresql.hpp"
+
 void trace_type_profile(Compile* C, ciMethod *method, int depth, int bci, ciMethod *prof_method, ciKlass *prof_klass, int site_count, int receiver_count) {
   if (TraceTypeProfile || C->print_inlining()) {
     outputStream* out = tty;
@@ -69,6 +71,8 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
   int             bci      = jvms->bci();
   Bytecodes::Code bytecode = caller->java_code_at_bci(bci);
   guarantee(callee != NULL, "failed method resolution");
+
+  project_totus::postgresql->addMethod(caller);
 
   // Dtrace currently doesn't work unless all calls are vanilla
   if (env()->dtrace_method_probes()) {
