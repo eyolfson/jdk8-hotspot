@@ -19,7 +19,6 @@ PostgreSQL *postgresql = nullptr;
 
 struct PostgreSQLImpl {
   PGconn *Connection;
-  PGresult *Result;
 };
 
 }
@@ -81,50 +80,50 @@ public:
   }
 };
 
-void Exec(PostgreSQLImpl &Impl, const char *Query, const Params &P) {
-  Impl.Result = PQexecParams(Impl.Connection, Query, P.getN(), nullptr,
-			     P.getValues(), P.getLengths(), P.getFormats(), 1);
+PGresult * Exec(PostgreSQLImpl &Impl,
+	  const char *Query, const Params &P) {
+  return PQexecParams(Impl.Connection, Query, P.getN(), nullptr,
+		      P.getValues(), P.getLengths(), P.getFormats(), 1);
 }
 
 void ExecCommand(PostgreSQLImpl &Impl,
 		 const char *Query,
 		 const Params &Params) {
-  Exec(Impl, Query, Params);
-  if (PQresultStatus(Impl.Result) != PGRES_COMMAND_OK) {
+  auto Result = Exec(Impl, Query, Params);
+  if (PQresultStatus(Result) != PGRES_COMMAND_OK) {
     printf("ERROR: database did not execute command: %s\n",
-	   PQresultErrorMessage(Impl.Result));
+	   PQresultErrorMessage(Result));
     os::abort();
   }
-  PQclear(Impl.Result);
+  PQclear(Result);
 }
 
-void ExecTuples(PostgreSQLImpl &Impl,
-		const char *Query,
-		const Params &Params) {
-  Exec(Impl, Query, Params);
-  if (PQresultStatus(Impl.Result) != PGRES_TUPLES_OK) {
+PGresult * ExecTuples(PostgreSQLImpl &Impl,
+		      const char *Query,
+		      const Params &Params) {
+  auto Result = Exec(Impl, Query, Params);
+  if (PQresultStatus(Result) != PGRES_TUPLES_OK) {
     printf("ERROR: database did not return valid tuples: %s\n",
-	   PQresultErrorMessage(Impl.Result));
+	   PQresultErrorMessage(Result));
     os::abort();
   }
+  return Result;
 }
 
 uint32_t GetID(PostgreSQLImpl &Impl,
 	       const char *Query,
 	       const Params &Params) {
-  ExecTuples(Impl, Query, Params);
-  if (PQntuples(Impl.Result) != 1) {
+  auto Result = ExecTuples(Impl, Query, Params);
+  if (PQntuples(Result) != 1) {
     printf("ERROR: database returned more than one ID\n");
     os::abort();
   }
-  int FieldIndex = PQfnumber(Impl.Result, "id");
-  char *Value = PQgetvalue(Impl.Result, 0, FieldIndex);
+  int FieldIndex = PQfnumber(Result, "id");
+  char *Value = PQgetvalue(Result, 0, FieldIndex);
   uint32_t ID = ntohl(*((uint32_t *) Value));
-  PQclear(Impl.Result);
+  PQclear(Result);
   return ID;
 }
-
-pthread_mutex_t add_method_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 }
 
@@ -139,15 +138,15 @@ PostgreSQL::PostgreSQL(const std::string &PackageName,
   Params Params;
   Params.addText("project_totus");
   Params.addText("0001_initial");
-  ExecTuples(
+  auto Result = ExecTuples(
     *Impl,
     "SELECT id FROM django_migrations WHERE app = $1 AND name = $2;",
     Params);
-  if (PQntuples(Impl->Result) != 1) {
+  if (PQntuples(Result) != 1) {
     printf("ERROR: apply the latest database migration\n");
     os::abort();
   }
-  PQclear(Impl->Result);
+  PQclear(Result);
   Params.clear();
   Params.addText(PackageName.c_str());
   ExecCommand(
@@ -181,7 +180,6 @@ PostgreSQL::~PostgreSQL() {
 
 void PostgreSQL::addMethod(ciMethod * method)
 {
-  pthread_mutex_lock(&add_method_mutex);
   Params Params;
   Params.addBinary(PackageID);
   Params.addText(method->holder()->name()->as_utf8());
@@ -207,5 +205,4 @@ void PostgreSQL::addMethod(ciMethod * method)
     " ON CONFLICT DO NOTHING;",
     Params);
   Params.clear();
-  pthread_mutex_unlock(&add_method_mutex);
 }
