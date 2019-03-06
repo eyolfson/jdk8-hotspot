@@ -25,6 +25,8 @@ struct PostgreSQLImpl {
 
 namespace {
 
+pthread_mutex_t exec_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 class Params {
   std::vector<const char *> Values;
   std::list<uint32_t> BinaryValues; // Required for stable iterators
@@ -81,16 +83,21 @@ public:
 };
 
 PGresult * Exec(PostgreSQLImpl &Impl,
-	  const char *Query, const Params &P) {
-  return PQexecParams(Impl.Connection, Query, P.getN(), nullptr,
-		      P.getValues(), P.getLengths(), P.getFormats(), 1);
+		const char *Query,
+		const Params &P) {
+  pthread_mutex_lock(&exec_mutex);
+  auto Result = PQexecParams(Impl.Connection, Query, P.getN(), nullptr,
+			     P.getValues(), P.getLengths(), P.getFormats(), 1);
+  pthread_mutex_unlock(&exec_mutex);
+  return Result;
 }
 
 void ExecCommand(PostgreSQLImpl &Impl,
 		 const char *Query,
 		 const Params &Params) {
   auto Result = Exec(Impl, Query, Params);
-  if (PQresultStatus(Result) != PGRES_COMMAND_OK) {
+  auto ResultStatus = PQresultStatus(Result);
+  if (ResultStatus != PGRES_COMMAND_OK) {
     printf("ERROR: database did not execute command: %s\n",
 	   PQresultErrorMessage(Result));
     os::abort();
@@ -102,7 +109,8 @@ PGresult * ExecTuples(PostgreSQLImpl &Impl,
 		      const char *Query,
 		      const Params &Params) {
   auto Result = Exec(Impl, Query, Params);
-  if (PQresultStatus(Result) != PGRES_TUPLES_OK) {
+  auto ResultStatus = PQresultStatus(Result);
+  if (ResultStatus != PGRES_TUPLES_OK) {
     printf("ERROR: database did not return valid tuples: %s\n",
 	   PQresultErrorMessage(Result));
     os::abort();
@@ -152,11 +160,11 @@ PostgreSQL::PostgreSQL(const std::string &PackageName,
   ExecCommand(
     *Impl,
     "INSERT INTO project_totus_package_base (name) VALUES ($1)"
-    " ON CONFLICT DO NOTHING;",
+    " ON CONFLICT DO NOTHING",
     Params);
   uint32_t PackageNameID = GetID(
     *Impl,
-    "SELECT id FROM project_totus_package_base WHERE name = $1;",
+    "SELECT id FROM project_totus_package_base WHERE name = $1",
     Params);
   Params.clear();
   Params.addBinary(PackageNameID);
@@ -164,12 +172,12 @@ PostgreSQL::PostgreSQL(const std::string &PackageName,
   ExecCommand(
     *Impl,
     "INSERT INTO project_totus_package (base_id, version) VALUES ($1, $2)"
-    " ON CONFLICT DO NOTHING;",
+    " ON CONFLICT DO NOTHING",
     Params);
   PackageID = GetID(
     *Impl,
     "SELECT id FROM project_totus_package"
-    " WHERE base_id = $1 AND version = $2;",
+    " WHERE base_id = $1 AND version = $2",
     Params);
   Params.clear();
 }
@@ -186,12 +194,12 @@ void PostgreSQL::addMethod(ciMethod * method)
   ExecCommand(
     *Impl,
     "INSERT INTO project_totus_klass (package_id, name) VALUES ($1, $2)"
-    " ON CONFLICT DO NOTHING;",
+    " ON CONFLICT DO NOTHING",
     Params);
   uint32_t KlassID = GetID(
     *Impl,
     "SELECT id FROM project_totus_klass"
-    " WHERE package_id = $1 AND name = $2;",
+    " WHERE package_id = $1 AND name = $2",
     Params);
   Params.clear();
   Params.addBinary(KlassID);
@@ -202,7 +210,7 @@ void PostgreSQL::addMethod(ciMethod * method)
     *Impl,
     "INSERT INTO project_totus_method"
     " (klass_id, name, descriptor, is_instance_method) VALUES ($1, $2, $3, $4)"
-    " ON CONFLICT DO NOTHING;",
+    " ON CONFLICT DO NOTHING",
     Params);
   Params.clear();
 }
