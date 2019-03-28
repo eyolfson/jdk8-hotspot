@@ -6,6 +6,7 @@
 #undef min
 
 #include <list>
+#include <unordered_map>
 #include <vector>
 
 #include <arpa/inet.h>
@@ -19,6 +20,8 @@ PostgreSQL *postgresql = nullptr;
 
 struct PostgreSQLImpl {
   PGconn *Connection;
+  std::unordered_map<ciMethod *, uint32_t> MethodIDMap;
+  std::unordered_map<ciMethod *, uint32_t> InlineMethodIDMap;
 };
 
 }
@@ -136,7 +139,8 @@ uint32_t GetID(PostgreSQLImpl &Impl,
 }
 
 PostgreSQL::PostgreSQL(const std::string &PackageName,
-		       const std::string &PackageVersion)
+		       const std::string &PackageVersion,
+		       const std::string &ExperimentName)
     : Impl(new PostgreSQLImpl) {
   Impl->Connection = PQconnectdb("dbname=project_totus");
   if (PQstatus(Impl->Connection) != CONNECTION_OK) {
@@ -145,7 +149,7 @@ PostgreSQL::PostgreSQL(const std::string &PackageName,
   }
   Params Params;
   Params.addText("project_totus");
-  Params.addText("0002_increase_method_descriptor_length");
+  Params.addText("0005_remove_timestamp");
   auto Result = ExecTuples(
     *Impl,
     "SELECT id FROM django_migrations WHERE app = $1 AND name = $2;",
@@ -156,6 +160,7 @@ PostgreSQL::PostgreSQL(const std::string &PackageName,
   }
   PQclear(Result);
   Params.clear();
+
   Params.addText(PackageName.c_str());
   ExecCommand(
     *Impl,
@@ -167,6 +172,7 @@ PostgreSQL::PostgreSQL(const std::string &PackageName,
     "SELECT id FROM project_totus_package_base WHERE name = $1",
     Params);
   Params.clear();
+
   Params.addBinary(PackageNameID);
   Params.addText(PackageVersion.c_str());
   ExecCommand(
@@ -180,37 +186,144 @@ PostgreSQL::PostgreSQL(const std::string &PackageName,
     " WHERE base_id = $1 AND version = $2",
     Params);
   Params.clear();
+
+  Params.addBinary(PackageID);
+  Params.addText(ExperimentName.c_str());
+  ExecCommand(
+    *Impl,
+    "INSERT INTO project_totus_experiment (package_id, name) VALUES ($1, $2)"
+    " ON CONFLICT DO NOTHING",
+    Params);
+  ExperimentID = GetID(
+    *Impl,
+    "SELECT id FROM project_totus_experiment"
+    " WHERE package_id = $1 AND name = $2",
+    Params);
+  Params.clear();
 }
 
 PostgreSQL::~PostgreSQL() {
   PQfinish(Impl->Connection);
 }
 
-void PostgreSQL::addMethod(ciMethod * method)
+uint32_t PostgreSQL::getMethodID(ciMethod * method)
 {
+  if (Impl->MethodIDMap.count(method) == 0) {
+    Params Params;
+    Params.addBinary(PackageID);
+    Params.addText(method->holder()->name()->as_utf8());
+    ExecCommand(
+      *Impl,
+      "INSERT INTO project_totus_klass (package_id, name) VALUES ($1, $2)"
+      " ON CONFLICT DO NOTHING",
+      Params);
+    uint32_t KlassID = GetID(
+      *Impl,
+      "SELECT id FROM project_totus_klass"
+      " WHERE package_id = $1 AND name = $2",
+      Params);
+    Params.clear();
+    Params.addBinary(KlassID);
+    Params.addText(method->name()->as_utf8());
+    Params.addText(method->signature()->as_symbol()->as_utf8());
+    Params.addBool(!method->is_static());
+    Params.addBinary(method->code_size());
+    ExecCommand(
+      *Impl,
+      "INSERT INTO project_totus_method"
+      " (klass_id, name, descriptor, is_instance_method, size) VALUES ($1, $2, $3, $4, $5)"
+      " ON CONFLICT DO NOTHING",
+      Params);
+    Params.clear();
+
+    Params.addBinary(KlassID);
+    Params.addText(method->name()->as_utf8());
+    Params.addText(method->signature()->as_symbol()->as_utf8());
+    uint32_t MethodID = GetID(
+      *Impl,
+      "SELECT id FROM project_totus_method"
+      " WHERE klass_id = $1 AND name = $2 AND descriptor = $3",
+      Params);
+    Params.clear();
+    Impl->MethodIDMap[method] = MethodID;
+  }
+  return Impl->MethodIDMap[method];
+}
+
+uint32_t PostgreSQL::getCallSiteID(ciMethod * caller, int bci)
+{
+  uint32_t CallerID = getMethodID(caller);
   Params Params;
-  Params.addBinary(PackageID);
-  Params.addText(method->holder()->name()->as_utf8());
+  Params.addBinary(CallerID);
+  Params.addBinary(bci);
   ExecCommand(
     *Impl,
-    "INSERT INTO project_totus_klass (package_id, name) VALUES ($1, $2)"
+    "INSERT INTO project_totus_call_site (caller_id, bci) VALUES ($1, $2)"
     " ON CONFLICT DO NOTHING",
     Params);
-  uint32_t KlassID = GetID(
+  uint32_t CallSiteID = GetID(
     *Impl,
-    "SELECT id FROM project_totus_klass"
-    " WHERE package_id = $1 AND name = $2",
+    "SELECT id FROM project_totus_call_site"
+    " WHERE caller_id = $1 AND bci = $2",
     Params);
   Params.clear();
-  Params.addBinary(KlassID);
-  Params.addText(method->name()->as_utf8());
-  Params.addText(method->signature()->as_symbol()->as_utf8());
-  Params.addBool(!method->is_static());
+  return CallSiteID;
+}
+
+uint32_t PostgreSQL::getMethodCallID(uint32_t CallSiteID, uint32_t CalleeID)
+{
+  Params Params;
+  Params.addBinary(CallSiteID);
+  Params.addBinary(CalleeID);
   ExecCommand(
     *Impl,
-    "INSERT INTO project_totus_method"
-    " (klass_id, name, descriptor, is_instance_method) VALUES ($1, $2, $3, $4)"
+    "INSERT INTO project_totus_method_call (call_site_id, callee_id) VALUES ($1, $2)"
     " ON CONFLICT DO NOTHING",
+    Params);
+  uint32_t MethodCallID = GetID(
+    *Impl,
+    "SELECT id FROM project_totus_method_call"
+    " WHERE call_site_id = $1 AND callee_id = $2",
+    Params);
+  Params.clear();
+  return MethodCallID;
+}
+
+uint32_t PostgreSQL::getInlineMethodCallID(uint32_t MethodCallID)
+{
+  Params Params;
+  Params.addBinary(ExperimentID);
+  Params.addBinary(MethodCallID);
+  ExecCommand(
+    *Impl,
+    "INSERT INTO project_totus_inline_method_call (experiment_id, method_call_id) VALUES ($1, $2)"
+    " ON CONFLICT DO NOTHING",
+    Params);
+  uint32_t InlineMethodCallID = GetID(
+    *Impl,
+    "SELECT id FROM project_totus_inline_method_call"
+    " WHERE experiment_id = $1 AND method_call_id = $2",
+    Params);
+  Params.clear();
+  return InlineMethodCallID;
+}
+
+void PostgreSQL::addInlineDecision(ciMethod *caller,
+				   int bci,
+				   ciMethod * callee,
+				   bool require_inline)
+{
+  uint32_t CallSiteID = getCallSiteID(caller, bci);
+  uint32_t CalleeID = getMethodID(callee);
+  uint32_t MethodCallID = getMethodCallID(CallSiteID, CalleeID);
+  uint32_t InlineMethodCallID = getInlineMethodCallID(MethodCallID);
+
+  Params Params;
+  Params.addBinary(InlineMethodCallID);
+  Params.addBool(require_inline);
+  ExecCommand(
+    *Impl,
+    "INSERT INTO project_totus_inline_decision (inline_method_call_id, require_inline) VALUES ($1, $2)",
     Params);
   Params.clear();
 }

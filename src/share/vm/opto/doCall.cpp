@@ -72,8 +72,6 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
   Bytecodes::Code bytecode = caller->java_code_at_bci(bci);
   guarantee(callee != NULL, "failed method resolution");
 
-  project_totus::postgresql->addMethod(caller);
-
   // Dtrace currently doesn't work unless all calls are vanilla
   if (env()->dtrace_method_probes()) {
     allow_inline = false;
@@ -172,6 +170,8 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
       assert(ci != &scratch_ci, "do not let this pointer escape");
       bool allow_inline   = (ci != NULL && !ci->is_cold());
       bool require_inline = (allow_inline && ci->is_hot());
+
+      project_totus::postgresql->addInlineDecision(caller, bci, callee, require_inline);
 
       if (allow_inline) {
         CallGenerator* cg = CallGenerator::for_inline(callee, expected_uses);

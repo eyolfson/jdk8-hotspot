@@ -19,5 +19,12 @@ void project_totus::initialize()
         printf("ERROR: environment variable PROJECT_TOTUS_PACKAGE_VERSION not set\n");
         os::abort();
     }
-    project_totus::postgresql = new PostgreSQL(package_name, package_version);
+    const char *experiment_name = getenv("PROJECT_TOTUS_EXPERIMENT_NAME");
+    if (experiment_name == nullptr) {
+        printf("ERROR: environment variable PROJECT_TOTUS_EXPERIMENT_NAME not set\n");
+        os::abort();
+    }
+    project_totus::postgresql = new PostgreSQL(package_name,
+					       package_version,
+					       experiment_name);
 }
