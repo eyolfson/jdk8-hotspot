@@ -72,12 +72,6 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
   Bytecodes::Code bytecode = caller->java_code_at_bci(bci);
   guarantee(callee != NULL, "failed method resolution");
 
-  bool project_totus_inline = false;
-  if (project_totus::postgresql && project_totus::postgresql->useInlineSet()) {
-    project_totus_inline = project_totus::postgresql->forceInline(caller, bci, callee);
-    allow_inline = project_totus_inline;
-  }
-
   // Dtrace currently doesn't work unless all calls are vanilla
   if (env()->dtrace_method_probes()) {
     allow_inline = false;
@@ -157,6 +151,12 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
   // Do not inline strict fp into non-strict code, or the reverse
   if (caller->is_strict() ^ callee->is_strict()) {
     allow_inline = false;
+  }
+
+  bool project_totus_inline = false;
+  if (project_totus::postgresql && project_totus::postgresql->useInlineSet()) {
+    project_totus_inline = project_totus::postgresql->forceInline(caller, bci, callee);
+    allow_inline = project_totus_inline;
   }
 
   // Attempt to inline...
