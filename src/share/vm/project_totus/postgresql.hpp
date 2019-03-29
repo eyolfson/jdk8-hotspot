@@ -17,15 +17,21 @@ class PostgreSQL {
   std::unique_ptr<PostgreSQLImpl> Impl;
   uint32_t PackageID;
   uint32_t ExperimentID;
+  uint32_t InlineSetID;
 public:
   PostgreSQL(const std::string &PackageName,
 	     const std::string &PackageVersion,
-	     const std::string &ExperimentName);
+	     const std::string &ExperimentName,
+	     const char *InlineSetName);
   ~PostgreSQL();
   void addInlineDecision(ciMethod *caller,
 			 int bci,
 			 ciMethod * callee,
 			 bool require_inline);
+  bool useInlineSet() const { return InlineSetID != 0; }
+  bool forceInline(ciMethod *caller,
+		   int bci,
+		   ciMethod * callee);
 private:
   uint32_t getCallSiteID(ciMethod * method, int bci);
   uint32_t getMethodID(ciMethod * method);

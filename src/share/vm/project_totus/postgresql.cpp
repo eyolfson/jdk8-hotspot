@@ -6,7 +6,10 @@
 #undef min
 
 #include <list>
+#include <sstream>
+#include <tuple>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <arpa/inet.h>
@@ -22,6 +25,7 @@ struct PostgreSQLImpl {
   PGconn *Connection;
   std::unordered_map<ciMethod *, uint32_t> MethodIDMap;
   std::unordered_map<ciMethod *, uint32_t> InlineMethodIDMap;
+  std::unordered_set<std::string> InlineMethodCall;
 };
 
 }
@@ -140,8 +144,9 @@ uint32_t GetID(PostgreSQLImpl &Impl,
 
 PostgreSQL::PostgreSQL(const std::string &PackageName,
 		       const std::string &PackageVersion,
-		       const std::string &ExperimentName)
-    : Impl(new PostgreSQLImpl) {
+		       const std::string &ExperimentName,
+		       const char *InlineSetName)
+  : Impl(new PostgreSQLImpl), InlineSetID(0) {
   Impl->Connection = PQconnectdb("dbname=project_totus");
   if (PQstatus(Impl->Connection) != CONNECTION_OK) {
     printf("ERROR: can not connect to database\n");
@@ -200,6 +205,69 @@ PostgreSQL::PostgreSQL(const std::string &PackageName,
     " WHERE package_id = $1 AND name = $2",
     Params);
   Params.clear();
+
+  if (InlineSetName != nullptr) {
+    Params.addBinary(ExperimentID);
+    Params.addText(InlineSetName);
+    InlineSetID = GetID(
+      *Impl,
+      "SELECT id FROM project_totus_inline_set"
+      " WHERE experiment_id = $1 AND name = $2",
+      Params);
+    Params.clear();
+
+    Params.addBinary(InlineSetID);
+    const char *Query = "SELECT"
+      " \"project_totus_klass\".\"name\","
+      " \"project_totus_method\".\"name\","
+      " \"project_totus_method\".\"descriptor\","
+      " \"project_totus_call_site\".\"bci\","
+      " T9.\"name\","
+      " T8.\"name\","
+      " T8.\"descriptor\""
+      " FROM \"project_totus_inline_method_call\""
+      " INNER JOIN"
+      " \"project_totus_inline_set_method_call\""
+      " ON (\"project_totus_inline_method_call\".\"id\" = \"project_totus_inline_set_method_call\".\"inline_method_call_id\")"
+      " INNER JOIN \"project_totus_method_call\""
+      " ON (\"project_totus_inline_method_call\".\"method_call_id\" = \"project_totus_method_call\".\"id\")"
+      " INNER JOIN \"project_totus_call_site\""
+      " ON (\"project_totus_method_call\".\"call_site_id\" = \"project_totus_call_site\".\"id\")"
+      " INNER JOIN \"project_totus_method\""
+      " ON (\"project_totus_call_site\".\"caller_id\" = \"project_totus_method\".\"id\")"
+      " INNER JOIN \"project_totus_klass\""
+      " ON (\"project_totus_method\".\"klass_id\" = \"project_totus_klass\".\"id\")"
+      " INNER JOIN \"project_totus_method\" T8"
+      " ON (\"project_totus_method_call\".\"callee_id\" = T8.\"id\")"
+      " INNER JOIN \"project_totus_klass\" T9"
+      " ON (T8.\"klass_id\" = T9.\"id\")"
+      " WHERE \"project_totus_inline_set_method_call\".\"inline_set_id\" = $1"
+      " ORDER BY \"project_totus_method\".\"name\""
+      " ASC, \"project_totus_call_site\".\"bci\" ASC, T8.\"name\" ASC";
+    Result = ExecTuples(
+      *Impl,
+      Query,
+      Params);
+    for (int i = 0; i < PQntuples(Result); ++i) {
+      const char *caller_klass_name = PQgetvalue(Result, i, 0);
+      const char *caller_method_name = PQgetvalue(Result, i, 1);
+      const char *caller_method_descriptor = PQgetvalue(Result, i, 2);
+      uint32_t bci = ntohl(*((uint32_t *)PQgetvalue(Result, i, 3)));
+      const char *callee_klass_name = PQgetvalue(Result, i, 4);
+      const char *callee_method_name = PQgetvalue(Result, i, 5);
+      const char *callee_method_descriptor = PQgetvalue(Result, i, 6);
+
+      std::stringstream ss;
+      ss << caller_klass_name
+         << '.' << caller_method_name << caller_method_descriptor
+         << '@' << bci << ' '
+         << callee_klass_name
+         << '.' << callee_method_name << callee_method_descriptor;
+      Impl->InlineMethodCall.insert(ss.str());
+    }
+    PQclear(Result);
+    Params.clear();
+  }
 }
 
 PostgreSQL::~PostgreSQL() {
@@ -306,6 +374,25 @@ uint32_t PostgreSQL::getInlineMethodCallID(uint32_t MethodCallID)
     Params);
   Params.clear();
   return InlineMethodCallID;
+}
+
+bool PostgreSQL::forceInline(ciMethod *caller,
+			     int bci,
+			     ciMethod * callee)
+{
+  if (caller == nullptr || callee == nullptr) {
+    printf("Crap\n");
+    os::abort();
+  }
+  std::stringstream ss;
+  ss << caller->holder()->name()->as_utf8()
+     << '.' << caller->name()->as_utf8()
+     << caller->signature()->as_symbol()->as_utf8()
+     << '@' << bci << ' '
+     << callee->holder()->name()->as_utf8()
+     << '.' << callee->name()->as_utf8()
+     << callee->signature()->as_symbol()->as_utf8();
+  return Impl->InlineMethodCall.count(ss.str()) > 0;
 }
 
 void PostgreSQL::addInlineDecision(ciMethod *caller,

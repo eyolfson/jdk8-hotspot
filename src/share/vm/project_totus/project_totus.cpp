@@ -9,22 +9,24 @@
 
 void project_totus::initialize()
 {
+    if (getenv("PROJECT_TOTUS_DISABLE") != nullptr) {
+        return;
+    }
     const char *package_name = getenv("PROJECT_TOTUS_PACKAGE_NAME");
     if (package_name == nullptr) {
-        printf("ERROR: environment variable PROJECT_TOTUS_PACKAGE_NAME not set\n");
-        os::abort();
+        return;
     }
     const char *package_version = getenv("PROJECT_TOTUS_PACKAGE_VERSION");
     if (package_version == nullptr) {
-        printf("ERROR: environment variable PROJECT_TOTUS_PACKAGE_VERSION not set\n");
-        os::abort();
+        return;
     }
     const char *experiment_name = getenv("PROJECT_TOTUS_EXPERIMENT_NAME");
     if (experiment_name == nullptr) {
-        printf("ERROR: environment variable PROJECT_TOTUS_EXPERIMENT_NAME not set\n");
-        os::abort();
+        return;
     }
+    const char *inline_set_name = getenv("PROJECT_TOTUS_INLINE_SET_NAME");
     project_totus::postgresql = new PostgreSQL(package_name,
 					       package_version,
-					       experiment_name);
+					       experiment_name,
+					       inline_set_name);
 }
