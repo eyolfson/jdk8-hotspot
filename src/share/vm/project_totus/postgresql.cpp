@@ -154,7 +154,7 @@ PostgreSQL::PostgreSQL(const std::string &PackageName,
   }
   Params Params;
   Params.addText("project_totus");
-  Params.addText("0005_remove_timestamp");
+  Params.addText("0006_add_inline_set_runtime_table");
   auto Result = ExecTuples(
     *Impl,
     "SELECT id FROM django_migrations WHERE app = $1 AND name = $2;",
@@ -380,10 +380,6 @@ bool PostgreSQL::forceInline(ciMethod *caller,
 			     int bci,
 			     ciMethod * callee)
 {
-  if (caller == nullptr || callee == nullptr) {
-    printf("Crap\n");
-    os::abort();
-  }
   std::stringstream ss;
   ss << caller->holder()->name()->as_utf8()
      << '.' << caller->name()->as_utf8()
@@ -395,18 +391,22 @@ bool PostgreSQL::forceInline(ciMethod *caller,
   return Impl->InlineMethodCall.count(ss.str()) > 0;
 }
 
-void PostgreSQL::addInlineDecision(ciMethod *caller,
-				   int bci,
-				   ciMethod * callee,
-				   bool require_inline)
+uint32_t PostgreSQL::getInlineMethodCallID(ciMethod *caller,
+					   int bci,
+					   ciMethod * callee)
 {
   uint32_t CallSiteID = getCallSiteID(caller, bci);
   uint32_t CalleeID = getMethodID(callee);
   uint32_t MethodCallID = getMethodCallID(CallSiteID, CalleeID);
-  uint32_t InlineMethodCallID = getInlineMethodCallID(MethodCallID);
+  return getInlineMethodCallID(MethodCallID);
+}
+
+void PostgreSQL::addInlineDecision(uint32_t inline_method_call_id,
+				   bool require_inline)
+{
 
   Params Params;
-  Params.addBinary(InlineMethodCallID);
+  Params.addBinary(inline_method_call_id);
   Params.addBool(require_inline);
   ExecCommand(
     *Impl,

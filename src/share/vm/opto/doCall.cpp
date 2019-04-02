@@ -72,6 +72,11 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
   Bytecodes::Code bytecode = caller->java_code_at_bci(bci);
   guarantee(callee != NULL, "failed method resolution");
 
+  uint32_t inline_method_call_id = 0;
+  if (project_totus::postgresql && !project_totus::postgresql->useInlineSet()) {
+    inline_method_call_id = project_totus::postgresql->getInlineMethodCallID(caller, bci, callee);
+  }
+
   // Dtrace currently doesn't work unless all calls are vanilla
   if (env()->dtrace_method_probes()) {
     allow_inline = false;
@@ -153,12 +158,6 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
     allow_inline = false;
   }
 
-  bool project_totus_inline = false;
-  if (project_totus::postgresql && project_totus::postgresql->useInlineSet()) {
-    project_totus_inline = project_totus::postgresql->forceInline(caller, bci, callee);
-    allow_inline = project_totus_inline;
-  }
-
   // Attempt to inline...
   if (allow_inline) {
     // The profile data is only partly attributable to this caller,
@@ -173,18 +172,27 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
       WarmCallInfo scratch_ci;
       bool should_delay = false;
       WarmCallInfo* ci = ilt->ok_to_inline(callee, jvms, profile, &scratch_ci, should_delay);
-      if (ci != NULL
-          && project_totus::postgresql
-          && project_totus::postgresql->useInlineSet()
-          && project_totus_inline) {
-        ci = WarmCallInfo::always_hot();
-      }
       assert(ci != &scratch_ci, "do not let this pointer escape");
       bool allow_inline   = (ci != NULL && !ci->is_cold());
       bool require_inline = (allow_inline && ci->is_hot());
 
+      if (project_totus::postgresql
+          && project_totus::postgresql->useInlineSet()) {
+        if (project_totus::postgresql->forceInline(caller, bci, callee)
+            && ci != NULL) {
+          allow_inline = true;
+          require_inline = true;
+          ci = WarmCallInfo::always_hot();
+        }
+        else {
+          allow_inline = false;
+          require_inline = false;
+          ci = NULL;
+        }
+      }
+
       if (project_totus::postgresql && !project_totus::postgresql->useInlineSet()) {
-        project_totus::postgresql->addInlineDecision(caller, bci, callee, require_inline);
+        project_totus::postgresql->addInlineDecision(inline_method_call_id, require_inline);
       }
 
       if (allow_inline) {

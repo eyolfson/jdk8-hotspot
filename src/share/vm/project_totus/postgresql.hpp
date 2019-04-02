@@ -24,9 +24,10 @@ public:
 	     const std::string &ExperimentName,
 	     const char *InlineSetName);
   ~PostgreSQL();
-  void addInlineDecision(ciMethod *caller,
-			 int bci,
-			 ciMethod * callee,
+  uint32_t getInlineMethodCallID(ciMethod *caller,
+				 int bci,
+				 ciMethod * callee);
+  void addInlineDecision(uint32_t inline_method_call_id,
 			 bool require_inline);
   bool useInlineSet() const { return InlineSetID != 0; }
   bool forceInline(ciMethod *caller,
