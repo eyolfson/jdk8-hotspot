@@ -72,6 +72,18 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
   Bytecodes::Code bytecode = caller->java_code_at_bci(bci);
   guarantee(callee != NULL, "failed method resolution");
 
+  // if (strcmp(caller->holder()->name()->as_utf8(), DEBUG_CALLER_KLASS_NAME) == 0
+  //     && bci == DEBUG_CALLER_BCI) {
+  //   printf("call_generator:start: %s.%s%s@%d %s.%s%s\n",
+  // 	   caller->holder()->name()->as_utf8(),
+  // 	   caller->name()->as_utf8(),
+  // 	   caller->signature()->as_symbol()->as_utf8(),
+  // 	   bci,
+  // 	   callee->holder()->name()->as_utf8(),
+  // 	   callee->name()->as_utf8(),
+  // 	   callee->signature()->as_symbol()->as_utf8());
+  // }
+
   uint32_t inline_method_call_id = 0;
   if (project_totus::postgresql && !project_totus::postgresql->useInlineSet()) {
     inline_method_call_id = project_totus::postgresql->getInlineMethodCallID(caller, bci, callee);
@@ -178,13 +190,25 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
 
       if (project_totus::postgresql
           && project_totus::postgresql->useInlineSet()) {
-        if (project_totus::postgresql->forceInline(caller, bci, callee)
-            && ci != NULL) {
-          allow_inline = true;
-          require_inline = true;
-          ci = WarmCallInfo::always_hot();
+        if (project_totus::postgresql->forceInline(caller, bci, callee)) {
+          if (ci != NULL) {
+            allow_inline = true;
+            require_inline = true;
+            ci = WarmCallInfo::always_hot();
+          }
         }
         else {
+	  // if (strcmp(caller->holder()->name()->as_utf8(), DEBUG_CALLER_KLASS_NAME) == 0
+	  //     && bci == DEBUG_CALLER_BCI) {
+	  //   printf("MISS! %s.%s%s@%d %s.%s%s\n",
+	  // 	   caller->holder()->name()->as_utf8(),
+	  // 	   caller->name()->as_utf8(),
+	  // 	   caller->signature()->as_symbol()->as_utf8(),
+	  // 	   bci,
+	  // 	   callee->holder()->name()->as_utf8(),
+	  // 	   callee->name()->as_utf8(),
+	  // 	   callee->signature()->as_symbol()->as_utf8());
+	  // }
           allow_inline = false;
           require_inline = false;
           ci = NULL;
@@ -193,6 +217,9 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
 
       if (project_totus::postgresql && !project_totus::postgresql->useInlineSet()) {
         project_totus::postgresql->addInlineDecision(inline_method_call_id, require_inline);
+        allow_inline = false;
+        require_inline = false;
+        ci = NULL;
       }
 
       if (allow_inline) {

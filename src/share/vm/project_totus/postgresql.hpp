@@ -9,6 +9,9 @@
 #include <memory>
 #include <string>
 
+// #define DEBUG_CALLER_KLASS_NAME "scala/runtime/BoxesRunTime"
+// #define DEBUG_CALLER_BCI 70
+
 namespace project_totus {
 
 class PostgreSQLImpl;

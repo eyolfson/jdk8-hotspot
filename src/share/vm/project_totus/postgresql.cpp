@@ -23,8 +23,7 @@ PostgreSQL *postgresql = nullptr;
 
 struct PostgreSQLImpl {
   PGconn *Connection;
-  std::unordered_map<ciMethod *, uint32_t> MethodIDMap;
-  std::unordered_map<ciMethod *, uint32_t> InlineMethodIDMap;
+  std::unordered_map<std::string, uint32_t> MethodIDMap;
   std::unordered_set<std::string> InlineMethodCall;
 };
 
@@ -154,7 +153,7 @@ PostgreSQL::PostgreSQL(const std::string &PackageName,
   }
   Params Params;
   Params.addText("project_totus");
-  Params.addText("0006_add_inline_set_runtime_table");
+  Params.addText("0007_increase_klass_max_length");
   auto Result = ExecTuples(
     *Impl,
     "SELECT id FROM django_migrations WHERE app = $1 AND name = $2;",
@@ -263,6 +262,11 @@ PostgreSQL::PostgreSQL(const std::string &PackageName,
          << '@' << bci << ' '
          << callee_klass_name
          << '.' << callee_method_name << callee_method_descriptor;
+
+      // if (strcmp(caller_klass_name, DEBUG_CALLER_KLASS_NAME) == 0
+      // 	  && bci == DEBUG_CALLER_BCI) {
+      // 	printf("PostgreSQL:InlineMethodCall.insert: %s\n", ss.str().c_str());
+      // }
       Impl->InlineMethodCall.insert(ss.str());
     }
     PQclear(Result);
@@ -276,7 +280,13 @@ PostgreSQL::~PostgreSQL() {
 
 uint32_t PostgreSQL::getMethodID(ciMethod * method)
 {
-  if (Impl->MethodIDMap.count(method) == 0) {
+  std::stringstream ss;
+  ss << method->holder()->name()->as_utf8()
+     << '.' << method->name()->as_utf8()
+     << method->signature()->as_symbol()->as_utf8();
+  std::string full_method_name = ss.str();
+
+  if (Impl->MethodIDMap.count(full_method_name) == 0) {
     Params Params;
     Params.addBinary(PackageID);
     Params.addText(method->holder()->name()->as_utf8());
@@ -313,14 +323,25 @@ uint32_t PostgreSQL::getMethodID(ciMethod * method)
       " WHERE klass_id = $1 AND name = $2 AND descriptor = $3",
       Params);
     Params.clear();
-    Impl->MethodIDMap[method] = MethodID;
+    Impl->MethodIDMap[full_method_name] = MethodID;
   }
-  return Impl->MethodIDMap[method];
+  return Impl->MethodIDMap[full_method_name];
 }
 
 uint32_t PostgreSQL::getCallSiteID(ciMethod * caller, int bci)
 {
+
   uint32_t CallerID = getMethodID(caller);
+
+  // if (strcmp(caller->holder()->name()->as_utf8(), DEBUG_CALLER_KLASS_NAME) == 0
+  //     && bci == DEBUG_CALLER_BCI) {
+  //   printf("  getCallSiteID: %s.%s%s@%d return CallerID=%d\n",
+  // 	   caller->holder()->name()->as_utf8(),
+  // 	   caller->name()->as_utf8(),
+  // 	   caller->signature()->as_symbol()->as_utf8(),
+  // 	   bci,
+  // 	   CallerID);
+  // }
   Params Params;
   Params.addBinary(CallerID);
   Params.addBinary(bci);
@@ -388,6 +409,20 @@ bool PostgreSQL::forceInline(ciMethod *caller,
      << callee->holder()->name()->as_utf8()
      << '.' << callee->name()->as_utf8()
      << callee->signature()->as_symbol()->as_utf8();
+
+  // if (strcmp(caller->holder()->name()->as_utf8(), DEBUG_CALLER_KLASS_NAME) == 0
+  //     && bci == DEBUG_CALLER_BCI) {
+  //   printf("forceInline: %s.%s%s@%d %s.%s%s return %d\n",
+  // 	   caller->holder()->name()->as_utf8(),
+  // 	   caller->name()->as_utf8(),
+  // 	   caller->signature()->as_symbol()->as_utf8(),
+  // 	   bci,
+  // 	   callee->holder()->name()->as_utf8(),
+  // 	   callee->name()->as_utf8(),
+  // 	   callee->signature()->as_symbol()->as_utf8(),
+  // 	   Impl->InlineMethodCall.count(ss.str()));
+  // }
+
   return Impl->InlineMethodCall.count(ss.str()) > 0;
 }
 
@@ -395,6 +430,18 @@ uint32_t PostgreSQL::getInlineMethodCallID(ciMethod *caller,
 					   int bci,
 					   ciMethod * callee)
 {
+  // if (strcmp(caller->holder()->name()->as_utf8(), DEBUG_CALLER_KLASS_NAME) == 0
+  //     && bci == DEBUG_CALLER_BCI) {
+  //   printf("getInlineMethodCallID: %s.%s%s@%d %s.%s%s\n",
+  // 	   caller->holder()->name()->as_utf8(),
+  // 	   caller->name()->as_utf8(),
+  // 	   caller->signature()->as_symbol()->as_utf8(),
+  // 	   bci,
+  // 	   callee->holder()->name()->as_utf8(),
+  // 	   callee->name()->as_utf8(),
+  // 	   callee->signature()->as_symbol()->as_utf8());
+  // }
+
   uint32_t CallSiteID = getCallSiteID(caller, bci);
   uint32_t CalleeID = getMethodID(callee);
   uint32_t MethodCallID = getMethodCallID(CallSiteID, CalleeID);
