@@ -1,11 +1,13 @@
 #include "project_totus.hpp"
 
-#include "postgresql.hpp"
-
 #include "runtime/os.hpp"
 #include "utilities/ostream.hpp"
 
 #include <stdio.h>
+
+
+project_totus::PostgreSQL *project_totus::postgresql = nullptr;
+
 
 void project_totus::initialize()
 {
@@ -29,4 +31,16 @@ void project_totus::initialize()
 					       package_version,
 					       experiment_name,
 					       inline_set_name);
+}
+
+bool project_totus::is_recording()
+{
+  return project_totus::postgresql
+         && !project_totus::postgresql->useInlineSet();
+}
+
+bool project_totus::is_using_inline_set()
+{
+  return project_totus::postgresql
+         && project_totus::postgresql->useInlineSet();
 }

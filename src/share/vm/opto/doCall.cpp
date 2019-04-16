@@ -40,7 +40,7 @@
 #include "prims/nativeLookup.hpp"
 #include "runtime/sharedRuntime.hpp"
 
-#include "project_totus/postgresql.hpp"
+#include "project_totus/project_totus.hpp"
 
 void trace_type_profile(Compile* C, ciMethod *method, int depth, int bci, ciMethod *prof_method, ciKlass *prof_klass, int site_count, int receiver_count) {
   if (TraceTypeProfile || C->print_inlining()) {
@@ -85,7 +85,7 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
   // }
 
   uint32_t inline_method_call_id = 0;
-  if (project_totus::postgresql && !project_totus::postgresql->useInlineSet()) {
+  if (project_totus::is_recording()) {
     inline_method_call_id = project_totus::postgresql->getInlineMethodCallID(caller, bci, callee);
   }
 
@@ -188,8 +188,7 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
       bool allow_inline   = (ci != NULL && !ci->is_cold());
       bool require_inline = (allow_inline && ci->is_hot());
 
-      if (project_totus::postgresql
-          && project_totus::postgresql->useInlineSet()) {
+      if (project_totus::is_using_inline_set()) {
         if (project_totus::postgresql->forceInline(caller, bci, callee)) {
           if (ci != NULL) {
             allow_inline = true;
@@ -215,7 +214,7 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
         }
       }
 
-      if (project_totus::postgresql && !project_totus::postgresql->useInlineSet()) {
+      if (project_totus::is_recording()) {
         project_totus::postgresql->addInlineDecision(inline_method_call_id, require_inline);
         allow_inline = false;
         require_inline = false;

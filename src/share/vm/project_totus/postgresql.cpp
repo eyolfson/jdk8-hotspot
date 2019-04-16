@@ -19,8 +19,6 @@ using namespace project_totus;
 
 namespace project_totus {
 
-PostgreSQL *postgresql = nullptr;
-
 struct PostgreSQLImpl {
   PGconn *Connection;
   std::unordered_map<std::string, uint32_t> MethodIDMap;

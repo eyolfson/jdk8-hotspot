@@ -43,8 +43,6 @@ private:
   uint32_t getInlineMethodCallID(uint32_t MethodCallID);
 };
 
-extern PostgreSQL *postgresql;
-
 }
 
 #endif
