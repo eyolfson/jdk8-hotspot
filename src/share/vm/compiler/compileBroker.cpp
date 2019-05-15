@@ -56,6 +56,8 @@
 #include "shark/sharkCompiler.hpp"
 #endif
 
+#include "project_totus/project_totus.hpp"
+
 #ifdef DTRACE_ENABLED
 
 // Only bother with this argument setup if dtrace is available
@@ -890,6 +892,9 @@ void CompileBroker::compilation_init() {
   // Set the interface to the current compiler(s).
   int c1_count = CompilationPolicy::policy()->compiler_count(CompLevel_simple);
   int c2_count = CompilationPolicy::policy()->compiler_count(CompLevel_full_optimization);
+  if (project_totus::is_recording()) {
+    c1_count = 0;
+  }
 #ifdef COMPILER1
   if (c1_count > 0) {
     _compilers[0] = new Compiler();
@@ -1275,6 +1280,9 @@ void CompileBroker::compile_method_base(methodHandle method,
 
     // Should this thread wait for completion of the compile?
     blocking = is_compile_blocking();
+    if (project_totus::is_recording()) {
+      blocking = true;
+    }
 
     // We will enter the compilation in the queue.
     // 14012000: Note that this sets the queued_for_compile bits in
