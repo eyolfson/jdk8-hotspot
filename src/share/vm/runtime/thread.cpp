@@ -3509,6 +3509,10 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     Universe::set_main_thread_group(thread_group());
     initialize_class(vmSymbols::java_lang_Thread(), CHECK_0);
     oop thread_object = create_initial_thread(thread_group, main_thread, CHECK_0);
+    // initialize compiler(s)
+#if defined(COMPILER1) || defined(COMPILER2) || defined(SHARK)
+    CompileBroker::compilation_init();
+#endif
     main_thread->set_threadObj(thread_object);
     // Set thread status to running since main thread has
     // been started and running.
@@ -3644,11 +3648,6 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   if (CleanChunkPoolAsync) {
     Chunk::start_chunk_pool_cleaner_task();
   }
-
-  // initialize compiler(s)
-#if defined(COMPILER1) || defined(COMPILER2) || defined(SHARK)
-  CompileBroker::compilation_init();
-#endif
 
   if (EnableInvokeDynamic) {
     // Pre-initialize some JSR292 core classes to avoid deadlock during class loading.
