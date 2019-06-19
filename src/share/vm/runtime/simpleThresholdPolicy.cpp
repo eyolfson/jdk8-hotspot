@@ -30,6 +30,7 @@
 #include "runtime/simpleThresholdPolicy.inline.hpp"
 #include "code/scopeDesc.hpp"
 
+#include "project_totus/project_totus.hpp"
 
 void SimpleThresholdPolicy::print_counters(const char* prefix, methodHandle mh) {
   int invocation_count = mh->invocation_count();
@@ -206,6 +207,14 @@ nmethod* SimpleThresholdPolicy::event(methodHandle method, methodHandle inlinee,
     print_event(bci == InvocationEntryBci ? CALL : LOOP, method, inlinee, bci, comp_level);
   }
 
+  if (project_totus::isUsingC2EarlyCompile()
+      && project_totus::getDatabase()->shouldC2CompileMethod(method(), bci)
+      && bci == InvocationEntryBci
+      && comp_level != CompLevel_full_optimization) {
+    submit_compile(method, bci, CompLevel_full_optimization, thread);
+    return NULL;
+  }
+
   if (bci == InvocationEntryBci) {
     method_invocation_event(method, inlinee, comp_level, nm, thread);
   } else {
@@ -243,6 +252,10 @@ void SimpleThresholdPolicy::compile(methodHandle mh, int bci, CompLevel level, J
   if (!CompileBroker::compilation_is_in_queue(mh)) {
     if (PrintTieredEvents) {
       print_event(COMPILE, mh, mh, bci, level);
+    }
+    if (level == CompLevel_full_optimization
+	&& project_totus::isRecordingC2EarlyCompile()) {
+      project_totus::getDatabase()->addC2CompileMethod(mh(), bci);
     }
     submit_compile(mh, bci, level, thread);
   }
