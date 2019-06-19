@@ -892,7 +892,7 @@ void CompileBroker::compilation_init() {
   // Set the interface to the current compiler(s).
   int c1_count = CompilationPolicy::policy()->compiler_count(CompLevel_simple);
   int c2_count = CompilationPolicy::policy()->compiler_count(CompLevel_full_optimization);
-  if (project_totus::is_recording()) {
+  if (project_totus::isRecordingInlineSet()) {
     c1_count = 0;
   }
 #ifdef COMPILER1
@@ -1280,7 +1280,7 @@ void CompileBroker::compile_method_base(methodHandle method,
 
     // Should this thread wait for completion of the compile?
     blocking = is_compile_blocking();
-    if (project_totus::is_recording()) {
+    if (project_totus::isRecordingInlineSet()) {
       blocking = true;
     }
 

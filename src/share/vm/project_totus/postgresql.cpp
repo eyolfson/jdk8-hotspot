@@ -23,6 +23,7 @@ struct PostgreSQLImpl {
   PGconn *Connection;
   std::unordered_map<std::string, uint32_t> MethodIDMap;
   std::unordered_set<std::string> InlineMethodCall;
+  std::unordered_set<std::string> ShouldC2CompileMethod;
 };
 
 }
@@ -141,8 +142,7 @@ uint32_t GetID(PostgreSQLImpl &Impl,
 
 PostgreSQL::PostgreSQL(const std::string &PackageName,
 		       const std::string &PackageVersion,
-		       const std::string &ExperimentName,
-		       const char *InlineSetName)
+		       const std::string &ExperimentName)
   : Impl(new PostgreSQLImpl), InlineSetID(0) {
   Impl->Connection = PQconnectdb("dbname=project_totus");
   if (PQstatus(Impl->Connection) != CONNECTION_OK) {
@@ -151,7 +151,7 @@ PostgreSQL::PostgreSQL(const std::string &PackageName,
   }
   Params Params;
   Params.addText("project_totus");
-  Params.addText("0008_add_normal_runtimes");
+  Params.addText("0011_add_c2_compile_is_enabled");
   auto Result = ExecTuples(
     *Impl,
     "SELECT id FROM django_migrations WHERE app = $1 AND name = $2;",
@@ -202,92 +202,139 @@ PostgreSQL::PostgreSQL(const std::string &PackageName,
     " WHERE package_id = $1 AND name = $2",
     Params);
   Params.clear();
-
-  if (InlineSetName != nullptr) {
-    Params.addBinary(ExperimentID);
-    Params.addText(InlineSetName);
-    InlineSetID = GetID(
-      *Impl,
-      "SELECT id FROM project_totus_inline_set"
-      " WHERE experiment_id = $1 AND name = $2",
-      Params);
-    Params.clear();
-
-    Params.addBinary(InlineSetID);
-    const char *Query = "SELECT"
-      " \"project_totus_klass\".\"name\","
-      " \"project_totus_method\".\"name\","
-      " \"project_totus_method\".\"descriptor\","
-      " \"project_totus_call_site\".\"bci\","
-      " T9.\"name\","
-      " T8.\"name\","
-      " T8.\"descriptor\""
-      " FROM \"project_totus_inline_method_call\""
-      " INNER JOIN"
-      " \"project_totus_inline_set_method_call\""
-      " ON (\"project_totus_inline_method_call\".\"id\" = \"project_totus_inline_set_method_call\".\"inline_method_call_id\")"
-      " INNER JOIN \"project_totus_method_call\""
-      " ON (\"project_totus_inline_method_call\".\"method_call_id\" = \"project_totus_method_call\".\"id\")"
-      " INNER JOIN \"project_totus_call_site\""
-      " ON (\"project_totus_method_call\".\"call_site_id\" = \"project_totus_call_site\".\"id\")"
-      " INNER JOIN \"project_totus_method\""
-      " ON (\"project_totus_call_site\".\"caller_id\" = \"project_totus_method\".\"id\")"
-      " INNER JOIN \"project_totus_klass\""
-      " ON (\"project_totus_method\".\"klass_id\" = \"project_totus_klass\".\"id\")"
-      " INNER JOIN \"project_totus_method\" T8"
-      " ON (\"project_totus_method_call\".\"callee_id\" = T8.\"id\")"
-      " INNER JOIN \"project_totus_klass\" T9"
-      " ON (T8.\"klass_id\" = T9.\"id\")"
-      " WHERE \"project_totus_inline_set_method_call\".\"inline_set_id\" = $1"
-      " ORDER BY \"project_totus_method\".\"name\""
-      " ASC, \"project_totus_call_site\".\"bci\" ASC, T8.\"name\" ASC";
-    Result = ExecTuples(
-      *Impl,
-      Query,
-      Params);
-    for (int i = 0; i < PQntuples(Result); ++i) {
-      const char *caller_klass_name = PQgetvalue(Result, i, 0);
-      const char *caller_method_name = PQgetvalue(Result, i, 1);
-      const char *caller_method_descriptor = PQgetvalue(Result, i, 2);
-      uint32_t bci = ntohl(*((uint32_t *)PQgetvalue(Result, i, 3)));
-      const char *callee_klass_name = PQgetvalue(Result, i, 4);
-      const char *callee_method_name = PQgetvalue(Result, i, 5);
-      const char *callee_method_descriptor = PQgetvalue(Result, i, 6);
-
-      std::stringstream ss;
-      ss << caller_klass_name
-         << '.' << caller_method_name << caller_method_descriptor
-         << '@' << bci << ' '
-         << callee_klass_name
-         << '.' << callee_method_name << callee_method_descriptor;
-
-      // if (strcmp(caller_klass_name, DEBUG_CALLER_KLASS_NAME) == 0
-      // 	  && bci == DEBUG_CALLER_BCI) {
-      // 	printf("PostgreSQL:InlineMethodCall.insert: %s\n", ss.str().c_str());
-      // }
-      Impl->InlineMethodCall.insert(ss.str());
-    }
-    PQclear(Result);
-    Params.clear();
-  }
 }
 
 PostgreSQL::~PostgreSQL() {
   PQfinish(Impl->Connection);
 }
 
-uint32_t PostgreSQL::getMethodID(ciMethod * method)
+void PostgreSQL::populateInlineSetID(const std::string &InlineSetName)
+{
+  Params Params;
+  Params.addBinary(ExperimentID);
+  Params.addText(InlineSetName.c_str());
+  InlineSetID = GetID(
+    *Impl,
+    "SELECT id FROM project_totus_inline_set"
+    " WHERE experiment_id = $1 AND name = $2",
+    Params);
+  Params.clear();
+}
+
+void PostgreSQL::populateInlineSetMethodCalls()
+{
+  Params Params;
+  Params.addBinary(InlineSetID);
+  const char *Query = "SELECT"
+    " \"project_totus_klass\".\"name\","
+    " \"project_totus_method\".\"name\","
+    " \"project_totus_method\".\"descriptor\","
+    " \"project_totus_call_site\".\"bci\","
+    " T9.\"name\","
+    " T8.\"name\","
+    " T8.\"descriptor\""
+    " FROM \"project_totus_inline_method_call\""
+    " INNER JOIN"
+    " \"project_totus_inline_set_method_call\""
+    " ON (\"project_totus_inline_method_call\".\"id\""
+    "   = \"project_totus_inline_set_method_call\".\"inline_method_call_id\")"
+    " INNER JOIN \"project_totus_method_call\""
+    " ON (\"project_totus_inline_method_call\".\"method_call_id\""
+    "   = \"project_totus_method_call\".\"id\")"
+    " INNER JOIN \"project_totus_call_site\""
+    " ON (\"project_totus_method_call\".\"call_site_id\""
+    "   = \"project_totus_call_site\".\"id\")"
+    " INNER JOIN \"project_totus_method\""
+    " ON (\"project_totus_call_site\".\"caller_id\""
+    "   = \"project_totus_method\".\"id\")"
+    " INNER JOIN \"project_totus_klass\""
+    " ON (\"project_totus_method\".\"klass_id\""
+    "   = \"project_totus_klass\".\"id\")"
+    " INNER JOIN \"project_totus_method\" T8"
+    " ON (\"project_totus_method_call\".\"callee_id\" = T8.\"id\")"
+    " INNER JOIN \"project_totus_klass\" T9"
+    " ON (T8.\"klass_id\" = T9.\"id\")"
+    " WHERE \"project_totus_inline_set_method_call\".\"inline_set_id\" = $1"
+    " ORDER BY \"project_totus_method\".\"name\""
+    " ASC, \"project_totus_call_site\".\"bci\" ASC, T8.\"name\" ASC";
+  auto Result = ExecTuples(
+    *Impl,
+    Query,
+    Params);
+  for (int i = 0; i < PQntuples(Result); ++i) {
+    const char * CallerKlassName = PQgetvalue(Result, i, 0);
+    const char * CallerMethodName = PQgetvalue(Result, i, 1);
+    const char * CallerMethodDescriptor = PQgetvalue(Result, i, 2);
+    uint32_t BCI = ntohl(*((uint32_t *)PQgetvalue(Result, i, 3)));
+    const char * CalleeKlassName = PQgetvalue(Result, i, 4);
+    const char * CalleeMethodName = PQgetvalue(Result, i, 5);
+    const char * CalleeMethodDescriptor = PQgetvalue(Result, i, 6);
+
+    std::stringstream ss;
+    ss << CallerKlassName
+       << '.' << CallerMethodName << CallerMethodDescriptor
+       << '@' << BCI << ' '
+       << CalleeKlassName
+       << '.' << CalleeMethodName << CalleeMethodDescriptor;
+
+    Impl->InlineMethodCall.insert(ss.str());
+  }
+
+  PQclear(Result);
+  Params.clear();
+}
+
+void PostgreSQL::populateEarlyC2CompileMethods()
+{
+  Params Params;
+  Params.addBinary(ExperimentID);
+  const char* Query = "SELECT"
+    " \"project_totus_klass\".\"name\","
+    " \"project_totus_method\".\"name\","
+    " \"project_totus_method\".\"descriptor\","
+    " \"project_totus_c2_compile_method\".\"bci\""
+    " FROM \"project_totus_c2_compile_method\""
+    " INNER JOIN \"project_totus_method\""
+    " ON"
+    " (\"project_totus_c2_compile_method\".\"method_id\""
+    "   = \"project_totus_method\".\"id\")"
+    " INNER JOIN \"project_totus_klass\""
+    " ON"
+    " (\"project_totus_method\".\"klass_id\""
+    "   = \"project_totus_klass\".\"id\")"
+    " WHERE"
+    " (\"project_totus_c2_compile_method\".\"experiment_id\" = $1"
+    " AND \"project_totus_c2_compile_method\".\"is_enabled\" = True)";
+  auto Result = ExecTuples(*Impl, Query, Params);
+  for (int i = 0; i < PQntuples(Result); ++i) {
+    const char *KlassName = PQgetvalue(Result, i, 0);
+    const char *MethodName = PQgetvalue(Result, i, 1);
+    const char *MethodDescriptor = PQgetvalue(Result, i, 2);
+    int32_t BCI = ntohl(*((int32_t *)PQgetvalue(Result, i, 3)));
+
+    std::stringstream ss;
+    ss << KlassName << '.' << MethodName << MethodDescriptor << '@' << BCI;
+    Impl->ShouldC2CompileMethod.insert(ss.str());
+  }
+
+  PQclear(Result);
+  Params.clear();
+}
+
+uint32_t PostgreSQL::getMethodID(const char* klass_name,
+				 const char* method_name,
+				 const char* method_signature,
+				 bool method_is_static,
+				 int method_code_size)
 {
   std::stringstream ss;
-  ss << method->holder()->name()->as_utf8()
-     << '.' << method->name()->as_utf8()
-     << method->signature()->as_symbol()->as_utf8();
+  ss << klass_name << '.' << method_name << method_signature;
   std::string full_method_name = ss.str();
 
   if (Impl->MethodIDMap.count(full_method_name) == 0) {
     Params Params;
     Params.addBinary(PackageID);
-    Params.addText(method->holder()->name()->as_utf8());
+    Params.addText(klass_name);
     ExecCommand(
       *Impl,
       "INSERT INTO project_totus_klass (package_id, name) VALUES ($1, $2)"
@@ -300,10 +347,10 @@ uint32_t PostgreSQL::getMethodID(ciMethod * method)
       Params);
     Params.clear();
     Params.addBinary(KlassID);
-    Params.addText(method->name()->as_utf8());
-    Params.addText(method->signature()->as_symbol()->as_utf8());
-    Params.addBool(!method->is_static());
-    Params.addBinary(method->code_size());
+    Params.addText(method_name);
+    Params.addText(method_signature);
+    Params.addBool(!method_is_static);
+    Params.addBinary(method_code_size);
     ExecCommand(
       *Impl,
       "INSERT INTO project_totus_method"
@@ -313,8 +360,8 @@ uint32_t PostgreSQL::getMethodID(ciMethod * method)
     Params.clear();
 
     Params.addBinary(KlassID);
-    Params.addText(method->name()->as_utf8());
-    Params.addText(method->signature()->as_symbol()->as_utf8());
+    Params.addText(method_name);
+    Params.addText(method_signature);
     uint32_t MethodID = GetID(
       *Impl,
       "SELECT id FROM project_totus_method"
@@ -324,6 +371,24 @@ uint32_t PostgreSQL::getMethodID(ciMethod * method)
     Impl->MethodIDMap[full_method_name] = MethodID;
   }
   return Impl->MethodIDMap[full_method_name];
+}
+
+uint32_t PostgreSQL::getMethodID(ciMethod * ci_method)
+{
+  return getMethodID(ci_method->holder()->name()->as_utf8(),
+		     ci_method->name()->as_utf8(),
+		     ci_method->signature()->as_symbol()->as_utf8(),
+		     ci_method->is_static(),
+		     ci_method->code_size());
+}
+
+uint32_t PostgreSQL::getMethodID(Method * method)
+{
+  return getMethodID(method->method_holder()->name()->as_utf8(),
+		     method->name()->as_utf8(),
+		     method->signature()->as_utf8(),
+		     method->is_static(),
+		     method->size());
 }
 
 uint32_t PostgreSQL::getCallSiteID(ciMethod * caller, int bci)
@@ -458,4 +523,30 @@ void PostgreSQL::addInlineDecision(uint32_t inline_method_call_id,
     "INSERT INTO project_totus_inline_decision (inline_method_call_id, require_inline) VALUES ($1, $2)",
     Params);
   Params.clear();
+}
+
+void PostgreSQL::addC2CompileMethod(Method * method, int bci)
+{
+  uint32_t MethodID = getMethodID(method);
+  Params Params;
+  Params.addBinary(ExperimentID);
+  Params.addBinary(MethodID);
+  Params.addBinary(bci);
+  Params.addBool(false);
+  ExecCommand(
+    *Impl,
+    "INSERT INTO project_totus_c2_compile_method (experiment_id, method_id, bci, is_enabled) VALUES ($1, $2, $3, $4)"
+    " ON CONFLICT DO NOTHING",
+    Params);
+  Params.clear();
+}
+
+bool PostgreSQL::shouldC2CompileMethod(Method* method, int bci)
+{
+  std::stringstream ss;
+  ss << method->method_holder()->name()->as_utf8() << '.'
+     << method->name()->as_utf8()
+     << method->signature()->as_utf8()
+     << '@' << bci;
+  return Impl->ShouldC2CompileMethod.count(ss.str()) > 0;
 }

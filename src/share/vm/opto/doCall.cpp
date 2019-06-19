@@ -85,8 +85,9 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
   // }
 
   uint32_t inline_method_call_id = 0;
-  if (project_totus::is_recording()) {
-    inline_method_call_id = project_totus::postgresql->getInlineMethodCallID(caller, bci, callee);
+  if (project_totus::isRecordingInlineSet()) {
+    inline_method_call_id =
+      project_totus::getDatabase()->getInlineMethodCallID(caller, bci, callee);
   }
 
   // Dtrace currently doesn't work unless all calls are vanilla
@@ -188,8 +189,8 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
       bool allow_inline   = (ci != NULL && !ci->is_cold());
       bool require_inline = (allow_inline && ci->is_hot());
 
-      if (project_totus::is_using_inline_set()) {
-        if (project_totus::postgresql->forceInline(caller, bci, callee)) {
+      if (project_totus::isUsingInlineSet()) {
+        if (project_totus::getDatabase()->forceInline(caller, bci, callee)) {
           if (ci != NULL) {
             allow_inline = true;
             require_inline = true;
@@ -214,8 +215,10 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
         }
       }
 
-      if (project_totus::is_recording()) {
-        project_totus::postgresql->addInlineDecision(inline_method_call_id, require_inline);
+      if (project_totus::isRecordingInlineSet()) {
+        project_totus::getDatabase()->addInlineDecision(
+          inline_method_call_id, require_inline
+        );
         allow_inline = false;
         require_inline = false;
         ci = NULL;

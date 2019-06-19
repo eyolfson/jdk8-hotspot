@@ -5,11 +5,15 @@
 
 namespace project_totus {
 
-extern PostgreSQL *postgresql;
-
 void initialize();
-bool is_recording();
-bool is_using_inline_set();
+
+bool isDisabled();
+bool isRecordingInlineSet();
+bool isUsingInlineSet();
+bool isRecordingC2EarlyCompile();
+bool isUsingC2EarlyCompile();
+
+PostgreSQL * getDatabase();
 
 }
 
