@@ -24,6 +24,10 @@ namespace {
 void project_totus::initialize()
 {
   const char * EnvMode = getenv("PROJECT_TOTUS_MODE");
+  if (EnvMode == nullptr) {
+    ShouldNotReachHere();
+  }
+
   if (strcasecmp(EnvMode, "disabled") == 0) {
     Mode = MK_DISABLED;
     Database = nullptr;
