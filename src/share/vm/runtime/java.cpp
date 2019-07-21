@@ -314,6 +314,10 @@ void print_statistics() {
     CodeCache::print();
   }
 
+  if (PrintDeoptimizationCount) {
+    Deoptimization::print_deoptimization_count();
+  }
+
   if (PrintMethodFlushingStatistics) {
     NMethodSweeper::print();
   }
@@ -378,6 +382,10 @@ void print_statistics() {
   if (PrintCodeCache) {
     MutexLockerEx mu(CodeCache_lock, Mutex::_no_safepoint_check_flag);
     CodeCache::print();
+  }
+
+  if (PrintDeoptimizationCount) {
+    Deoptimization::print_deoptimization_count();
   }
 
   if (PrintMethodFlushingStatistics) {

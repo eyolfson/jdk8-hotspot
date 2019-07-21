@@ -256,8 +256,10 @@ public:
 //
 // The broker for all compilation requests.
 class CompileBroker: AllStatic {
- friend class Threads;
+  friend class Threads;
   friend class CompileTaskWrapper;
+  friend class ciCacheProfiles;
+  friend class ciCacheProfilesBroker;
 
  public:
   enum {

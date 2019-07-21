@@ -52,6 +52,7 @@ class ciMethod : public ciMetadata {
   friend class ciBytecodeStream;
   friend class ciMethodHandle;
   friend class ciReplay;
+  friend class ciCacheProfilesBroker;
 
  private:
   // General method information.

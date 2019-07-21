@@ -104,6 +104,8 @@ class MethodCounters: public MetaspaceObj {
   void set_rate(float rate)                      { _rate = rate; }
 #endif
 
+  bool scale_if_cached(methodHandle mh, double& scale );
+
   int highest_comp_level() const;
   void set_highest_comp_level(int level);
   int highest_osr_comp_level() const;

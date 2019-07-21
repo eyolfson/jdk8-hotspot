@@ -26,6 +26,7 @@
 #include "asm/macroAssembler.hpp"
 #include "asm/macroAssembler.inline.hpp"
 #include "ci/ciReplay.hpp"
+#include "ci/ciCacheProfiles.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "code/exceptionHandlerTable.hpp"
 #include "code/nmethod.hpp"
@@ -888,6 +889,12 @@ Compile::Compile( ciEnv* ci_env, C2Compiler* compiler, ciMethod* target, int osr
   }
   if (method()->has_option("DumpInline") && (ilt() != NULL)) {
     env()->dump_inline_data(_compile_id);
+  }
+  // Dump profile to allow profile caching
+  if(env()->comp_level()>CompLevel_limited_profile && env()->comp_level() >= DumpProfilesMinTier) {
+    if ((DumpProfiles || method()->has_option("DumpProfile")) && (!method()->has_option("IgnoreDumpProfile"))) {
+      env()->dump_cache_profiles(_compile_id, method()->name()->as_utf8());
+    }
   }
 
   // Now that we know the size of all the monitors we can add a fixed slot
@@ -3900,6 +3907,8 @@ void Compile::dump_inlining() {
 void Compile::dump_inline_data(outputStream* out) {
   InlineTree* inl_tree = ilt();
   if (inl_tree != NULL) {
+    //tty->print(">DUMP_INLINE_DATA FOR:");method()->print_name(tty);tty->print("\n");
+    //tty->print(">INL_TREE->COUNT() = %d<\n",inl_tree->count());
     out->print(" inline %d", inl_tree->count());
     inl_tree->dump_replay_data(out);
   }

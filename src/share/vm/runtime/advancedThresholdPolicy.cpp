@@ -378,6 +378,11 @@ CompLevel AdvancedThresholdPolicy::common(Predicate p, Method* method, CompLevel
       if (is_method_profiled(method)) {
         // Special case: we got here because this method was fully profiled in the interpreter.
         next_level = CompLevel_full_optimization;
+      } else if (CacheProfiles && CacheProfilesMode==2 && ciCacheProfiles::is_initialized() && ciCacheProfiles::is_cached(method)==CompLevel_full_optimization) {
+        // another Special case: we run in CacheProfilesMode=2 meaning all methods that are cached
+        // (with full optimizations) and want to be compiled with full profiles get degraded to
+        // limited profiles therefore we need a new transition from limited profiles to full optimization.
+        next_level = CompLevel_full_optimization;
       } else {
         MethodData* mdo = method->method_data();
         if (mdo != NULL) {

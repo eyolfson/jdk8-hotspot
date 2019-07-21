@@ -946,8 +946,8 @@ class CommandLineFlags {
           "Print native memory tracking summary data if it is on")          \
                                                                             \
   diagnostic(bool, LogCompilation, false,                                   \
-          "Log compilation activity in detail to LogFile")                  \
-                                                                            \
+		  "Log compilation activity in detail to LogFile")                  \
+																			\
   product(bool, PrintCompilation, false,                                    \
           "Print compilations")                                             \
                                                                             \
@@ -3449,7 +3449,45 @@ class CommandLineFlags {
           "File containing compilation replay information"                  \
           "[default: ./replay_pid%p.log] (%p replaced with pid)")           \
                                                                             \
-   product(ccstr, InlineDataFile, NULL,                                     \
+  experimental(bool, DumpProfiles, false,                                   \
+          "Cache profiling information for future VM runs")                 \
+                                                                            \
+  experimental(intx, DumpProfilesMinTier, 3,                                \
+          "Specifies the minimum compilation tier that dumps"               \
+          "method profiles. Use 3 or 4"                                     \
+          "since methods lvl<3 do not get dumped anyway")                   \
+                                                                            \
+  experimental(bool, CacheProfiles, false,                                  \
+          "Use profiling information")                                      \
+                                                                            \
+  experimental(intx, CacheProfilesMode, 2,                                  \
+          "Mode in which CacheProfiling is operating: "                     \
+          "0 - lower threshold and compile to C2 directly; "                \
+          "1 - do not lower thresholds and"                                 \
+          "    compile to highest profile directly; "                       \
+          "2 - skip C1 profiling phase and"                                 \
+          "    keep everything else as standard; ")                         \
+                                                                            \
+  experimental(double, CacheProfilesMode0ThresholdScaling, 0.01,            \
+          "CompileThresholdScaling in case of mode0")                       \
+                                                                            \
+  experimental(ccstr, CacheProfilesFile, NULL,                              \
+          "File containing cached profiles"                                 \
+          "[default: ./profiles_pid%p.log] (%p replaced with pid)")         \
+                                                                            \
+  experimental(bool, PrintCacheProfiles, false,                             \
+           "Prints cache profiling information")                            \
+                                                                            \
+  experimental(bool, PrintDeoptimizationCount, false,                       \
+           "Prints count of deoptimizations at JVM shutdown")               \
+                                                                            \
+  experimental(bool, PrintDeoptimizationCountVerbose, false,                \
+           "Prints count of deoptimizations after each deopt")              \
+                                                                            \
+  experimental(bool, PrintCompileQueueSize, false,                          \
+           "Prints size of compile queue after each add")                   \
+                                                                            \
+  product(ccstr, InlineDataFile, NULL,                                      \
           "File containing inlining replay information"                     \
           "[default: ./inline_pid%p.log] (%p replaced with pid)")           \
                                                                             \

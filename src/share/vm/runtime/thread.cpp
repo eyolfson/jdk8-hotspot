@@ -27,6 +27,8 @@
 #include "classfile/javaClasses.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "classfile/vmSymbols.hpp"
+#include "ci/ciCacheProfiles.hpp"
+#include "ci/ciCacheProfilesBroker.hpp"
 #include "code/scopeDesc.hpp"
 #include "compiler/compileBroker.hpp"
 #include "interpreter/interpreter.hpp"
@@ -3649,6 +3651,10 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // initialize compiler(s)
 #if defined(COMPILER1) || defined(COMPILER2) || defined(SHARK)
   CompileBroker::compilation_init();
+  // if used, invoke initialization of CacheProfiles
+  if(CacheProfiles && !ciCacheProfiles::is_initialized()) {
+    ciCacheProfiles::initialize(THREAD);
+  }
 #endif
 
   if (EnableInvokeDynamic) {

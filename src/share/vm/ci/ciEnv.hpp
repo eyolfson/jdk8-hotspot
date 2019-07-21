@@ -456,11 +456,16 @@ public:
   void metadata_do(void f(Metadata*)) { _factory->metadata_do(f); }
 
   // Dump the compilation replay data for the ciEnv to the stream.
+  static bool first_dump;
   void dump_replay_data(int compile_id);
   void dump_inline_data(int compile_id);
   void dump_replay_data(outputStream* out);
   void dump_replay_data_unsafe(outputStream* out);
   void dump_compile_data(outputStream* out);
+  // Dump the cached profiling information for the ciEnv to the stream.
+  void dump_cache_profiles(int compile_id, const char* methodName);
+  void dump_cache_profiles(outputStream* out);
+  void dump_cache_profiles_unsafe(outputStream* out);
 };
 
 #endif // SHARE_VM_CI_CIENV_HPP

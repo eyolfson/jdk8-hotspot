@@ -740,6 +740,10 @@ JRT_LEAF(BasicType, Deoptimization::unpack_frames(JavaThread* thread, int exec_m
   return bt;
 JRT_END
 
+void Deoptimization::print_deoptimization_count() {
+  ttyLocker ttyl;
+  tty->print_cr("Total number of deoptimizations: %d <<<", _deoptimization_count);
+}
 
 int Deoptimization::deoptimize_dependents() {
   Threads::deoptimized_wrt_marked_nmethods();
@@ -1064,6 +1068,12 @@ vframeArray* Deoptimization::create_vframeArray(JavaThread* thread, frame fr, Re
     }
   }
 #endif
+  if (PrintDeoptimizationCount || PrintDeoptimizationCountVerbose) {
+    increase_deoptimization_count();
+    if (PrintDeoptimizationCountVerbose) {
+      print_deoptimization_count();
+    }
+  }
 
   // Register map for next frame (used for stack crawl).  We capture
   // the state of the deopt'ing frame's caller.  Thus if we need to
@@ -1199,6 +1209,11 @@ void Deoptimization::revoke_biases_of_monitors(CodeBlob* cb) {
   BiasedLocking::revoke_at_safepoint(objects_to_revoke);
 }
 
+volatile int Deoptimization::_deoptimization_count = 0;
+
+void Deoptimization::increase_deoptimization_count() {
+  _deoptimization_count++;
+}
 
 void Deoptimization::deoptimize_single_frame(JavaThread* thread, frame fr) {
   assert(fr.can_be_deoptimized(), "checking frame type");

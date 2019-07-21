@@ -25,6 +25,8 @@
 #ifndef SHARE_VM_RUNTIME_SIMPLETHRESHOLDPOLICY_INLINE_HPP
 #define SHARE_VM_RUNTIME_SIMPLETHRESHOLDPOLICY_INLINE_HPP
 
+#include "ci/ciCacheProfiles.hpp"
+
 template<CompLevel level>
 bool SimpleThresholdPolicy::call_predicate_helper(int i, int b, double scale) {
   switch(level) {

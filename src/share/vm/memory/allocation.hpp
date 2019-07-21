@@ -680,8 +680,8 @@ class ResourceObj ALLOCATION_SUPER_CLASS_SPEC {
   NEW_C_HEAP_ARRAY_RETURN_NULL(type, 1, memflags)
 
 // deallocate obj of type in heap without calling dtor
-#define FREE_C_HEAP_OBJ(objname, memflags)\
-  FreeHeap((char*)objname, memflags);
+#define FREE_C_HEAP_OBJ(objname)\
+  FreeHeap((char*)objname);
 
 // for statistics
 #ifndef PRODUCT

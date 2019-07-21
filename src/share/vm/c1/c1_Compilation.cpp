@@ -570,6 +570,12 @@ Compilation::Compilation(AbstractCompiler* compiler, ciEnv* env, ciMethod* metho
       md->set_would_profile(_would_profile);
     }
   }
+  // Dump profile to allow profile caching
+  if(_env->comp_level()>CompLevel_limited_profile && _env->comp_level() >= DumpProfilesMinTier) {
+    if ((DumpProfiles || _method->has_option("DumpProfile")) && (!_method->has_option("IgnoreDumpProfile"))) {
+      _env->dump_cache_profiles(0, _method->name()->as_utf8());
+    }
+  }
 }
 
 Compilation::~Compilation() {
