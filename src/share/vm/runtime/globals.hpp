@@ -2985,6 +2985,9 @@ class CommandLineFlags {
   develop(bool, DebugDeoptimization, false,                                 \
           "Tracing various information while debugging deoptimization")     \
                                                                             \
+  diagnostic(bool, ProjectTotusPrintDeoptimization, false,                  \
+          "Print deoptimization with reason and action")                    \
+                                                                            \
   product(intx, SelfDestructTimer, 0,                                       \
           "Will cause VM to terminate after a given time (in minutes) "     \
           "(0 means off)")                                                  \

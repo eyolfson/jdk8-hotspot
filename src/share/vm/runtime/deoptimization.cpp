@@ -1367,6 +1367,16 @@ JRT_ENTRY(void, Deoptimization::uncommon_trap_inner(JavaThread* thread, jint tra
                               trap_reason_name(reason), trap_action_name(action), fr.pc(),
                               trap_method->name_and_sig_as_C_string(), trap_bci);
 
+    if (ProjectTotusPrintDeoptimization) {
+      ResourceMark rm;
+      ttyLocker ttyl;
+      tty->print("Deoptimization in %s reason=%s action=%s",
+		 nm->method()->name_and_sig_as_C_string(),
+		 trap_reason_name(reason),
+		 trap_action_name(action));
+      tty->cr();
+    }
+
     // Print a bunch of diagnostics, if requested.
     if (TraceDeoptimization || LogCompilation) {
       ResourceMark rm;
