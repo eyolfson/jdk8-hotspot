@@ -21,6 +21,27 @@ namespace {
   project_totus::PostgreSQL * Database;
 }
 
+static thread_local bool debug = false;
+static thread_local int indent = 0;
+void project_totus::setDebug() {
+  debug = true;
+}
+void project_totus::incIndent() {
+  ++indent;
+}
+void project_totus::decIndent() {
+  --indent;
+}
+int project_totus::getIndent() {
+  return indent;
+}
+void project_totus::unsetDebug() {
+  debug = false;
+}
+bool project_totus::isDebug() {
+  return debug;
+}
+
 void project_totus::initialize()
 {
   const char * EnvMode = getenv("PROJECT_TOTUS_MODE");

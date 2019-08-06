@@ -39,6 +39,8 @@
 # include "adfiles/ad_ppc_64.hpp"
 #endif
 
+#include "project_totus/project_totus.hpp"
+
 // register information defined by ADLC
 extern const char register_save_policy[];
 extern const int  register_save_type[];
@@ -108,12 +110,26 @@ void C2Compiler::initialize() {
 void C2Compiler::compile_method(ciEnv* env, ciMethod* target, int entry_bci) {
   assert(is_initialized(), "Compiler thread must be initialized");
 
+  bool ProjectTotusFound = false;
+  if ((strcmp(target->holder()->name()->as_utf8(), "java/util/ComparableTimSort") == 0)
+      && (strcmp(target->name()->as_utf8(), "binarySort") == 0)
+      && (strcmp(target->signature()->as_symbol()->as_utf8(), "([Ljava/lang/Object;III)V") == 0)) {
+    ProjectTotusFound = true;
+  }
+
   bool subsume_loads = SubsumeLoads;
   bool do_escape_analysis = DoEscapeAnalysis && !env->jvmti_can_access_local_variables();
   bool eliminate_boxing = EliminateAutoBox;
   while (!env->failing()) {
     // Attempt to compile while subsuming loads into machine instructions.
+    if (ProjectTotusFound) {
+      dprintf(1, "[Project Totus %p] Found method...\n", Thread::current());
+      project_totus::setDebug();
+    }
     Compile C(env, this, target, entry_bci, subsume_loads, do_escape_analysis, eliminate_boxing);
+    if (ProjectTotusFound) {
+      project_totus::unsetDebug();
+    }
 
 
     // Check result and retry if appropriate.

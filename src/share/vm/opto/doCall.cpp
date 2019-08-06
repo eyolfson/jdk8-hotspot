@@ -72,17 +72,21 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
   Bytecodes::Code bytecode = caller->java_code_at_bci(bci);
   guarantee(callee != NULL, "failed method resolution");
 
-  // if (strcmp(caller->holder()->name()->as_utf8(), DEBUG_CALLER_KLASS_NAME) == 0
-  //     && bci == DEBUG_CALLER_BCI) {
-  //   printf("call_generator:start: %s.%s%s@%d %s.%s%s\n",
-  // 	   caller->holder()->name()->as_utf8(),
-  // 	   caller->name()->as_utf8(),
-  // 	   caller->signature()->as_symbol()->as_utf8(),
-  // 	   bci,
-  // 	   callee->holder()->name()->as_utf8(),
-  // 	   callee->name()->as_utf8(),
-  // 	   callee->signature()->as_symbol()->as_utf8());
-  // }
+  if (project_totus::isDebug()) {
+    project_totus::incIndent();
+    dprintf(1, "[Project Totus %p] ", Thread::current());
+    for (int i = 0; i < project_totus::getIndent(); ++i) {
+      dprintf(1, "  ");
+    }
+    dprintf(1, "call_generator caller=%s.%s%s@%d callee=%s.%s%s\n",
+	    caller->holder()->name()->as_utf8(),
+	    caller->name()->as_utf8(),
+	    caller->signature()->as_symbol()->as_utf8(),
+	    bci,
+	    callee->holder()->name()->as_utf8(),
+	    callee->name()->as_utf8(),
+	    callee->signature()->as_symbol()->as_utf8());
+  }
 
   uint32_t inline_method_call_id = 0;
   if (project_totus::isRecordingInlineSet()) {
@@ -99,6 +103,13 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
   // from more specific profile data which pertains to this inlining.
   // Right now, ignore the information in jvms->caller(), and do method[bci].
   ciCallProfile profile = caller->call_profile_at_bci(bci);
+  if (project_totus::isDebug()) {
+    dprintf(1, "[Project Totus %p] ", Thread::current());
+    for (int i = 0; i < project_totus::getIndent(); ++i) {
+      dprintf(1, "  ");
+    }
+    dprintf(1, "call_profile_at_bci(%d)\n", bci);
+  }
 
   // See how many times this site has been invoked.
   int site_count = profile.count();
@@ -151,6 +162,9 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
         cg_intrinsic = cg;
         cg = NULL;
       } else {
+	if (project_totus::isDebug()) {
+	  project_totus::decIndent();
+	}
         return cg;
       }
     }
@@ -163,6 +177,9 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
   if (callee->is_method_handle_intrinsic()) {
     CallGenerator* cg = CallGenerator::for_method_handle_call(jvms, caller, callee, delayed_forbidden);
     assert(cg == NULL || !delayed_forbidden || !cg->is_late_inline() || cg->is_mh_late_inline(), "unexpected CallGenerator");
+    if (project_totus::isDebug()) {
+      project_totus::decIndent();
+    }
     return cg;
   }
 
@@ -227,26 +244,48 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
       if (allow_inline) {
         CallGenerator* cg = CallGenerator::for_inline(callee, expected_uses);
 
+	if (project_totus::isDebug()) {
+	  dprintf(1, "[Project Totus %p] ", Thread::current());
+	  for (int i = 0; i < project_totus::getIndent(); ++i) {
+	    dprintf(1, "  ");
+	  }
+	  dprintf(1, "if (allow_inline) branch\n", bci);
+	}
         if (require_inline && cg != NULL) {
           // Delay the inlining of this method to give us the
           // opportunity to perform some high level optimizations
           // first.
           if (should_delay_string_inlining(callee, jvms)) {
             assert(!delayed_forbidden, "strange");
+	    if (project_totus::isDebug()) {
+	      project_totus::decIndent();
+	    }
             return CallGenerator::for_string_late_inline(callee, cg);
           } else if (should_delay_boxing_inlining(callee, jvms)) {
             assert(!delayed_forbidden, "strange");
+	    if (project_totus::isDebug()) {
+	      project_totus::decIndent();
+	    }
             return CallGenerator::for_boxing_late_inline(callee, cg);
           } else if ((should_delay || AlwaysIncrementalInline) && !delayed_forbidden) {
+	    if (project_totus::isDebug()) {
+	      project_totus::decIndent();
+	    }
             return CallGenerator::for_late_inline(callee, cg);
           }
         }
         if (cg == NULL || should_delay) {
           // Fall through.
         } else if (require_inline || !InlineWarmCalls) {
+	  if (project_totus::isDebug()) {
+	    project_totus::decIndent();
+	  }
           return cg;
         } else {
           CallGenerator* cold_cg = call_generator(callee, vtable_index, call_does_dispatch, jvms, false, prof_factor);
+	  if (project_totus::isDebug()) {
+	    project_totus::decIndent();
+	  }
           return CallGenerator::for_warm_call(ci, cold_cg, cg);
         }
       }
@@ -257,6 +296,13 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
       // The major receiver's count >= TypeProfileMajorReceiverPercent of site_count.
       bool have_major_receiver = (100.*profile.receiver_prob(0) >= (float)TypeProfileMajorReceiverPercent);
       ciMethod* receiver_method = NULL;
+      if (project_totus::isDebug()) {
+	dprintf(1, "[Project Totus %p] ", Thread::current());
+	for (int i = 0; i < project_totus::getIndent(); ++i) {
+	  dprintf(1, "  ");
+	}
+	dprintf(1, "have_major_receiver = %d\n", have_major_receiver);
+      }
 
       int morphism = profile.morphism();
       if (speculative_receiver_type != NULL) {
@@ -337,7 +383,12 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
               ciKlass* k = speculative_receiver_type != NULL ? speculative_receiver_type : profile.receiver(0);
               float hit_prob = speculative_receiver_type != NULL ? 1.0 : profile.receiver_prob(0);
               CallGenerator* cg = CallGenerator::for_predicted_call(k, miss_cg, hit_cg, hit_prob);
-              if (cg != NULL)  return cg;
+              if (cg != NULL)  {
+		if (project_totus::isDebug()) {
+		  project_totus::decIndent();
+		}
+		return cg;
+	      }
             }
           }
         }
@@ -349,17 +400,29 @@ CallGenerator* Compile::call_generator(ciMethod* callee, int vtable_index, bool 
   // for already discovered intrinsic.
   if (allow_inline && allow_intrinsics && cg_intrinsic != NULL) {
     assert(cg_intrinsic->does_virtual_dispatch(), "sanity");
+    if (project_totus::isDebug()) {
+      project_totus::decIndent();
+    }
     return cg_intrinsic;
   }
 
   // There was no special inlining tactic, or it bailed out.
   // Use a more generic tactic, like a simple call.
   if (call_does_dispatch) {
+    if (project_totus::isDebug()) {
+      project_totus::decIndent();
+    }
     return CallGenerator::for_virtual_call(callee, vtable_index);
   } else {
     // Class Hierarchy Analysis or Type Profile reveals a unique target,
     // or it is a static or special call.
+    if (project_totus::isDebug()) {
+      project_totus::decIndent();
+    }
     return CallGenerator::for_direct_call(callee, should_delay_inlining(callee, jvms));
+  }
+  if (project_totus::isDebug()) {
+    project_totus::decIndent();
   }
 }
 
@@ -447,7 +510,6 @@ bool Parse::can_not_compile_call_site(ciMethod *dest_method, ciInstanceKlass* kl
   assert(dest_method->is_loaded(), "dest_method: typeflow responsibility");
   return false;
 }
-
 
 //------------------------------do_call----------------------------------------
 // Handle your basic call.  Inline if we can & want to, else just setup call.

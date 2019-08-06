@@ -5,6 +5,13 @@
 
 namespace project_totus {
 
+void setDebug();
+void incIndent();
+void decIndent();
+int getIndent();
+void unsetDebug();
+bool isDebug();
+
 void initialize();
 
 bool isDisabled();
